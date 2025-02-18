@@ -148,30 +148,20 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onRmsChanged(float rmsdB) {
-                voiceStrength = rmsdB; // Store voice strength
+                voiceStrength = Math.max(0, rmsdB); // Ensure non-negative values
 
-                if (voiceStrength > 9 && isOnPlatform) {  // Only jump when on standingPlatform
-                    isOnPlatform = false; // Mark as airborne
-                    float jumpForce = (float) Math.pow(rmsdB, 0.5) * jumpMultiplier;
-                    characterVelocity = -Math.min(jumpForce, 25);
+                // Normalize voice strength to screen height
+                int minHeight = 200;  // Minimum height character can reach
+                int maxHeight = screenHeight - 200; // Maximum height
 
-                    if (characterY < 250) characterY = 400; // Limit max jump height
-                } else {
+                // Map voice strength (rmsdB) to height
+                float normalizedStrength = Math.min(voiceStrength / 13f, 1f); // Scale rmsdB to 0-1
+                characterY = (int) (maxHeight - (normalizedStrength * (maxHeight - minHeight)));
 
-                    // Check if the character lands on the standingPlatform
-                    if (characterY + characterVelocity >= standingPlatform.y - 50 && characterVelocity > 0) {
-                        characterY = standingPlatform.y - 50;
-                        characterVelocity = 0;
-                        isOnPlatform = true;
-                    }
-
-                    // Ensure the character doesn’t fall below a certain point
-                    if (characterY > screenHeight - 80) {
-                        characterY = screenHeight - 100;
-                        isOnPlatform = true; // Allow jumping again when touching the ground
-                    }
+                // Ensure it doesn’t go below the ground
+                if (characterY > screenHeight - 80) {
+                    characterY = screenHeight - 100;
                 }
-                platformSpeed = Math.max(1f, rmsdB * 2);
             }
 
             @Override

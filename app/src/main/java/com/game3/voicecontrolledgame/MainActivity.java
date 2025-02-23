@@ -67,6 +67,8 @@ public class MainActivity extends AppCompatActivity {
     private int frameDelay = 100;
     int characterWidth = 200; // Set your desired width
     int characterHeight = 230; // Set your desired height
+    private Platform lastPlatform = null;
+    private boolean canJump = true; // Cooldown flag
 
 
     private static class Platform {
@@ -123,7 +125,7 @@ public class MainActivity extends AppCompatActivity {
         };
 
         platformBitmap = Bitmap.createScaledBitmap(BitmapFactory.decodeResource(getResources(), R.drawable.platform), characterWidth, characterHeight, true);
-
+        platformBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.platform);
 
 
 
@@ -148,21 +150,10 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onRmsChanged(float rmsdB) {
-                voiceStrength = Math.max(0, rmsdB); // Ensure non-negative values
-
-                // Normalize voice strength to screen height
-                int minHeight = 200;  // Minimum height character can reach
-                int maxHeight = screenHeight - 200; // Maximum height
-
-                // Map voice strength (rmsdB) to height
-                float normalizedStrength = Math.min(voiceStrength / 13f, 1f); // Scale rmsdB to 0-1
-                characterY = (int) (maxHeight - (normalizedStrength * (maxHeight - minHeight)));
-
-                // Ensure it doesn’t go below the ground
-                if (characterY > screenHeight - 80) {
-                    characterY = screenHeight - 100;
-                }
+                voiceStrength = Math.max(0, rmsdB); // Ensure non-negative value
             }
+
+
 
             @Override
             public void onBufferReceived(byte[] buffer) {}
@@ -213,29 +204,28 @@ public class MainActivity extends AppCompatActivity {
         // Restart listening if needed, even during silence
         speechRecognizer.startListening(intent);
     }
-/**
-    private void updatePlatformSpeed() {
-        // Gradually increase speed based on the score
-        platformSpeed = 15f + (maxPlatformSpeed - 10f) * Math.min(score / (float) maxScore, 1f);
-        gravity = 1f + (maxGravity - .1f) * Math.min(score / (float) maxScore, 1f);
-        gravity = Math.min(gravity, maxGravity);
+    /**
+     private void updatePlatformSpeed() {
+     // Gradually increase speed based on the score
+     platformSpeed = 15f + (maxPlatformSpeed - 10f) * Math.min(score / (float) maxScore, 1f);
+     gravity = 1f + (maxGravity - .1f) * Math.min(score / (float) maxScore, 1f);
+     gravity = Math.min(gravity, maxGravity);
+     }
+     **/
+
+    private boolean checkLeftSideCollision(Platform platform) {
+        int characterLeft = characterX - 190;
+        int characterRight = characterX + 190;
+        int characterTop = characterY - 40;
+        int characterBottom = characterY + 40;
+
+        boolean isTouchingSide = characterRight > platform.x && characterLeft < platform.x;
+        boolean isAboveOrBelow = characterBottom > platform.y && characterTop < platform.y + platform.height;
+
+        return isTouchingSide && isAboveOrBelow;
     }
-**/
-
-private boolean checkLeftSideCollision(Platform platform) {
-    // Check if the character is to the left of the platform
-    int characterLeft = characterX - 190;  // left edge of the character
-    int characterRight = characterX + 190; // right edge of the character
-    int characterTop = characterY - 40;   // top of the character
-    int characterBottom = characterY + 40; // bottom of the character
-
-    // Ensure the character is moving toward the platform (coming from the left)
-    return characterRight > platform.x && characterLeft < platform.x &&
-            characterBottom > platform.y && characterTop < platform.y + platform.height;
-}
     private void startGame() {
         resetGame(); // Clear all previous data before starting
-        // startScoring(); // Score
         startListening(); // Start voice recognition
 
         // Create the initial platform
@@ -246,12 +236,11 @@ private boolean checkLeftSideCollision(Platform platform) {
         platforms.add(new Platform(initialPlatformX, initialPlatformY, initialPlatformWidth, initialPlatformHeight));
 
         // Create the initial standing platform
-        int standingPlatformWidth =  screenWidth;
+        int standingPlatformWidth = screenWidth;
         int standingPlatformHeight = 1 + screenHeight;
-        int standingPlatformX = 0;  // Align with character's X position
-        int standingPlatformY = characterY + 50;  // Slightly below the character's starting position
+        int standingPlatformX = 0;
+        int standingPlatformY = characterY + 50;
         standingPlatform = new Platform(standingPlatformX, standingPlatformY, standingPlatformWidth, standingPlatformHeight);
-
 
         gameLoop = new Runnable() {
             @Override
@@ -265,58 +254,66 @@ private boolean checkLeftSideCollision(Platform platform) {
                         if (canvas != null) {
                             canvas.drawColor(Color.WHITE); // Clear the canvas
 
-                            if (!isOnPlatform) {
-                                characterVelocity += gravity;  // Apply gravity
-                                characterY += characterVelocity;
+                            // Handle Jumping (Prevent Double Jump)
+                            if (voiceStrength > 7.5 && isOnPlatform && canJump) {
+                                isOnPlatform = false;
+                                canJump = false;
+                                characterVelocity = -Math.min(voiceStrength * 5.5f, 45);
+
+                                // Delay before allowing another jump
+                                new Handler().postDelayed(() -> canJump = true, 300);
                             }
 
-                            if (characterY >= screenHeight) { // Adjust this value based on your screen size
-                                isPlaying = false; // Stop the game
-                                btnRestart.setVisibility(Button.VISIBLE); // Show restart button
+                            // Apply Gravity Smoothly
+                            characterVelocity += gravity;
+                            characterY += characterVelocity;
+
+                            // Prevent Falling Through the Bottom of the Screen
+                            if (characterY >= screenHeight) {
+                                isPlaying = false;
+                                btnRestart.setVisibility(Button.VISIBLE);
                             }
 
-                            // Check for collisions with platforms
+                            // Check for Collisions with Platforms
                             for (Platform platform : platforms) {
                                 if (checkLeftSideCollision(platform)) {
-                                    // Move the character back if it is approaching from the left side of the platform
-                                    characterX = platform.x - characterX; // Move the character to the left edge of the platform
-                                    characterVelocity = 0;
+                                    isOnPlatform = false; // Prevent sticking to sides
                                 }
-
-
 
                                 int characterBottom = characterY + 50;
-                                if (characterY + characterVelocity >= platform.y - 50 &&
-                                        characterVelocity > 0 &&  // Ensure it's falling down
-                                        characterX + 50 >= platform.x && characterX <= platform.x + platform.width) {
+                                boolean isAbovePlatform = characterY < platform.y;
+                                boolean isWithinPlatformWidth = characterX >= platform.x && characterX <= platform.x + platform.width - 50;
 
+                                if (characterBottom >= platform.y && isAbovePlatform && isWithinPlatformWidth) {
+                                    if (lastPlatform != platform) { // Score only on new platforms
+                                        score += 10;
+                                        scoreText.setText("Score: " + score);
+                                        lastPlatform = platform;
+                                    }
+                                    isOnPlatform = true;
                                     characterY = platform.y - 50;
                                     characterVelocity = 0;
-                                    isOnPlatform = true;
-                                    score += 10; // Add score when landing on a platform
-                                    scoreText.setText("Score: " + score);
                                 }
-
-
                             }
+
+                            // Move Platforms Left
                             for (Platform platform : platforms) {
-                                platform.x -= 5; // Move left
+                                platform.x -= 5;
                             }
 
-                            // Remove platforms that have moved off-screen
+                            // Remove Platforms that Move Off-Screen
                             platforms.removeIf(platform -> platform.x + platform.width < 0);
 
-                            // Generate new platforms if needed
+                            // Generate New Platforms
                             if (!platforms.isEmpty() && platforms.get(platforms.size() - 1).x < gameSurface.getWidth() - 300) {
                                 generateRandomPlatform();
                             }
 
+                            // Select Character Sprite Based on State
                             Bitmap currentFrame;
                             if (!isOnPlatform) {
-                                // Character is in the air → use jump or land frame
                                 currentFrame = (characterVelocity < 0) ? characterJumpFrames[0] : characterJumpFrames[1];
                             } else {
-                                // Character is on the ground → use running animation
                                 if (System.currentTimeMillis() - lastFrameTime > frameDelay) {
                                     frameIndex = (frameIndex + 1) % characterRunFrames.length;
                                     lastFrameTime = System.currentTimeMillis();
@@ -324,36 +321,31 @@ private boolean checkLeftSideCollision(Platform platform) {
                                 currentFrame = characterRunFrames[frameIndex];
                             }
 
-                            // Draw the selected frame
+                            // Draw Character
                             canvas.drawBitmap(currentFrame, characterX, characterY - 168, null);
-
-                            // Draw Standing Platform
-                            paint.setColor(Color.BLACK);
-                           // canvas.drawRect(standingPlatform.x, standingPlatform.y, standingPlatform.x + standingPlatform.width, standingPlatform.y + standingPlatform.height, paint);
 
                             // Draw Platforms
                             paint.setColor(Color.RED);
                             for (Platform platform : platforms) {
                                 canvas.drawRect(platform.x, platform.y, platform.x + platform.width, platform.y + platform.height, paint);
                             }
-
-                            //updatePlatformSpeed(); // Adjust speed based on the new score
                         }
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
                 } finally {
                     if (canvas != null) {
-                        surfaceHolder.unlockCanvasAndPost(canvas); // Unlock the canvas
+                        surfaceHolder.unlockCanvasAndPost(canvas);
                     }
                 }
 
-                gameHandler.postDelayed(this, 20); // Continue the game loop
+                gameHandler.postDelayed(this, 20);
             }
         };
 
-        gameHandler.post(gameLoop); // Start the game loop
+        gameHandler.post(gameLoop);
     }
+
 
     private void generateRandomPlatform() {
         Random random = new Random();

@@ -56,9 +56,9 @@ public class MainActivity extends AppCompatActivity {
     private final int maxScore = 1200; // Score at which max speed is reached
     private boolean isOnPlatform;
     private float characterVelocity = 0f; // Vertical velocity
-    private float gravity = 6f;  // Gravity acceleration
+    private float gravity = 2.5f;  // Gravity acceleration
     private final float jumpMultiplier = 23f; // Adjust jump strength
-    // Base gravity value
+
     private final float maxGravity = 2f ;  // Maximum gravity cap
     private Bitmap[] characterRunFrames, characterJumpFrames;
     private Bitmap platformBitmap;
@@ -69,6 +69,13 @@ public class MainActivity extends AppCompatActivity {
     int characterHeight = 230; // Set your desired height
     private Platform lastPlatform = null;
     private boolean canJump = true; // Cooldown flag
+    private Bitmap characterBitmap;
+
+    // Hitbox
+    int hitboxWidth = characterWidth - 45;  // Adjust width
+    int hitboxHeight = characterHeight - 50; // Adjust height
+    int hitboxX = characterX + 10; // Center hitbox inside sprite
+    int hitboxY = characterY - 135; // Adjust vertical alignment
 
 
     private static class Platform {
@@ -213,17 +220,7 @@ public class MainActivity extends AppCompatActivity {
      }
      **/
 
-    private boolean checkLeftSideCollision(Platform platform) {
-        int characterLeft = characterX - 190;
-        int characterRight = characterX + 190;
-        int characterTop = characterY - 40;
-        int characterBottom = characterY + 40;
 
-        boolean isTouchingSide = characterRight > platform.x && characterLeft < platform.x;
-        boolean isAboveOrBelow = characterBottom > platform.y && characterTop < platform.y + platform.height;
-
-        return isTouchingSide && isAboveOrBelow;
-    }
     private void startGame() {
         resetGame(); // Clear all previous data before starting
         startListening(); // Start voice recognition
@@ -255,7 +252,7 @@ public class MainActivity extends AppCompatActivity {
                             canvas.drawColor(Color.WHITE); // Clear the canvas
 
                             // Handle Jumping (Prevent Double Jump)
-                            if (voiceStrength > 7.5 && isOnPlatform && canJump) {
+                            if (voiceStrength > 9 && isOnPlatform && canJump) {
                                 isOnPlatform = false;
                                 canJump = false;
                                 characterVelocity = -Math.min(voiceStrength * 5.5f, 45);
@@ -266,39 +263,61 @@ public class MainActivity extends AppCompatActivity {
 
                             // Apply Gravity Smoothly
                             characterVelocity += gravity;
-                            characterY += characterVelocity;
+                            hitboxY += characterVelocity;
 
                             // Prevent Falling Through the Bottom of the Screen
-                            if (characterY >= screenHeight) {
+                            if (hitboxY >= screenHeight) {
                                 isPlaying = false;
                                 btnRestart.setVisibility(Button.VISIBLE);
                             }
 
+
+
+
                             // Check for Collisions with Platforms
                             for (Platform platform : platforms) {
-                                if (checkLeftSideCollision(platform)) {
-                                    isOnPlatform = false; // Prevent sticking to sides
-                                }
+                                int hitboxBottom = hitboxY + hitboxHeight;
+                                boolean isAbovePlatform = hitboxY < platform.y;
+                                boolean isWithinPlatformWidth = hitboxX + hitboxWidth >= platform.x && hitboxX <= platform.x + platform.width;
 
-                                int characterBottom = characterY + 50;
-                                boolean isAbovePlatform = characterY < platform.y;
-                                boolean isWithinPlatformWidth = characterX >= platform.x && characterX <= platform.x + platform.width - 50;
-
-                                if (characterBottom >= platform.y && isAbovePlatform && isWithinPlatformWidth) {
-                                    if (lastPlatform != platform) { // Score only on new platforms
+                                // **LANDING CHECK (Using Hitbox Instead of Bitmap)**
+                                if (hitboxBottom >= platform.y && isAbovePlatform && isWithinPlatformWidth) {
+                                    if (!isOnPlatform) { // Score only when transitioning from air to platform
                                         score += 10;
                                         scoreText.setText("Score: " + score);
                                         lastPlatform = platform;
                                     }
                                     isOnPlatform = true;
-                                    characterY = platform.y - 50;
+                                    hitboxY = platform.y - hitboxHeight; // Align hitbox on top
                                     characterVelocity = 0;
+                                }
+
+                                boolean hitsLeftSide = hitboxX + hitboxWidth > platform.x
+                                        && hitboxX < platform.x
+                                        && hitboxY + hitboxHeight > platform.y
+                                        && hitboxY < platform.y + platform.height;
+
+                                boolean hitsRightSide = hitboxX < platform.x + platform.width
+                                        && hitboxX + hitboxWidth > platform.x + platform.width
+                                        && hitboxY + hitboxHeight > platform.y
+                                        && hitboxY < platform.y + platform.height;
+
+                                if (hitsLeftSide || hitsRightSide) {
+                                    hitboxX = (hitsLeftSide) ? platform.x - hitboxWidth : platform.x + platform.width;
                                 }
                             }
 
+                            // If no platform was landed on, keep falling
+                            if (!isOnPlatform) {
+                                characterVelocity += gravity;
+                                hitboxY += characterVelocity;
+                            }
+
+
                             // Move Platforms Left
                             for (Platform platform : platforms) {
-                                platform.x -= 5;
+                                platform.x -= 15f + (maxPlatformSpeed - 10f) * Math.min(score / (float) maxScore, 1f);;
+
                             }
 
                             // Remove Platforms that Move Off-Screen
@@ -322,7 +341,14 @@ public class MainActivity extends AppCompatActivity {
                             }
 
                             // Draw Character
-                            canvas.drawBitmap(currentFrame, characterX, characterY - 168, null);
+
+                            canvas.drawBitmap(currentFrame, hitboxX - 10, hitboxY - 35,null);
+
+                            // Draw Hitbox (DEBUGGING)
+                            paint.setColor(Color.BLUE); // Change to any color you like
+                            paint.setStyle(Paint.Style.STROKE); // Outline instead of fill
+                            paint.setStrokeWidth(5); // Thickness of the hitbox line
+                            canvas.drawRect(hitboxX, hitboxY, hitboxX + hitboxWidth, hitboxY + hitboxHeight, paint);
 
                             // Draw Platforms
                             paint.setColor(Color.RED);
@@ -355,7 +381,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Y pos
         int platformY;
-        if (score >= 600) {
+        if (score >= 150) {
             // Choose between front of character and slightly above
             int choice = random.nextInt(3);
             if (choice == 0) {
@@ -365,13 +391,13 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 platformY = standingPlatform.y - 300; // Higher
             }
-        } else if (score >= 300) {
+        } else if (score >= 50) {
             platformY = random.nextBoolean()
                     ? standingPlatform.y - 100 // Front of character
                     : standingPlatform.y - 300; // Slightly above character
         } else {
             // Always generate in front of the character initially
-            platformY = standingPlatform.y - 100;
+            platformY = standingPlatform.y - random.nextInt(150) + 70;
         }
 
         // X pos
@@ -379,7 +405,7 @@ public class MainActivity extends AppCompatActivity {
                 ? 700
                 : platforms.get(platforms.size() - 1).x + platforms.get(platforms.size() - 1).width;
 
-        int spacing = Math.min(900, 450 + (int)(score * 0.5)); // Increase spacing slightly as score increases
+        int spacing = Math.min(400, 450 + (int)(score * 0.5)); // Increase spacing slightly as score increases
         platformX += spacing;
 
         platforms.add(new Platform(platformX, platformY, platformWidth, platformHeight));
@@ -434,17 +460,30 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void restartGame() {
+        // Stop the current game loop
         isPlaying = false;
         gameHandler.removeCallbacks(gameLoop);
-        stopScoring();
 
-        // Clear all platforms and reset character position
-        platforms.clear();
+        // Reset game variables
         score = 0;
-        characterY = standingPlatform.y + 50;
+        scoreText.setText("Score: " + score);
         characterVelocity = 0;
-        gravity = 6f;
+        gravity = 2.5f;
         isOnPlatform = true;
+
+        // Reset character & hitbox positions
+        characterX = 150;  // Set this to your original starting X position
+        characterY = 1500; // Original starting Y position
+        hitboxX = characterX + 10;
+        hitboxY = characterY - 135; // Adjust to your original hitbox placement
+
+        // Clear platforms and re-add the starting platform
+        platforms.clear();
+        int initialPlatformWidth = 400;
+        int initialPlatformHeight = 100 + screenHeight;
+        int initialPlatformX = 80;
+        int initialPlatformY = characterY + 50;
+        platforms.add(new Platform(initialPlatformX, initialPlatformY, initialPlatformWidth, initialPlatformHeight));
 
         // Hide restart button
         btnRestart.setVisibility(Button.GONE);
@@ -456,10 +495,15 @@ public class MainActivity extends AppCompatActivity {
             surfaceHolder.unlockCanvasAndPost(canvas);
         }
 
-        // Restart game logic
-        isPlaying = true;
-        startGame();
+        // Restart game logic (Prevent double loops)
+        new Handler().postDelayed(() -> {
+            if (!isPlaying) {
+                isPlaying = true;
+                startGame();
+            }
+        }, 100); // Small delay to ensure reset completes properly
     }
+
 
 
     private void endGame() {

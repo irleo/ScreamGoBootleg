@@ -15,6 +15,7 @@ import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.util.Log;
+import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.widget.Button;
@@ -52,7 +53,7 @@ public class MainActivity extends AppCompatActivity {
     private Handler scoreHandler = new Handler(Looper.getMainLooper());
     private Runnable scoreRunnable;
     private float platformSpeed = 0f; // Initial platform speed
-    private final float maxPlatformSpeed = 60f; // Maximum platform speed
+    private final float maxPlatformSpeed = 50f; // Maximum platform speed
     private final int maxScore = 1200; // Score at which max speed is reached
     private boolean isOnPlatform;
     private float characterVelocity = 0f; // Vertical velocity
@@ -65,17 +66,20 @@ public class MainActivity extends AppCompatActivity {
     private int frameIndex = 0;
     private long lastFrameTime = 0;
     private int frameDelay = 100;
-    int characterWidth = 200; // Set your desired width
-    int characterHeight = 230; // Set your desired height
+    int characterWidth = 185; // Set your desired width
+    int characterHeight = 225; // Set your desired height
     private Platform lastPlatform = null;
     private boolean canJump = true; // Cooldown flag
-    private Bitmap characterBitmap;
+    private Bitmap characterBitmap, backgroundBitmap;
 
     // Hitbox
-    int hitboxWidth = characterWidth - 45;  // Adjust width
-    int hitboxHeight = characterHeight - 50; // Adjust height
+    int hitboxWidth = characterWidth - 40;  // Adjust width
+    int hitboxHeight = characterHeight - 45; // Adjust height
     int hitboxX = characterX + 10; // Center hitbox inside sprite
     int hitboxY = characterY - 135; // Adjust vertical alignment
+    private int backgroundX = 0;
+    private int backgroundSpeed = 5;
+    long startTime = System.currentTimeMillis();
 
 
     private static class Platform {
@@ -131,8 +135,12 @@ public class MainActivity extends AppCompatActivity {
                 Bitmap.createScaledBitmap(BitmapFactory.decodeResource(getResources(), R.drawable.char_land), characterWidth, characterHeight, true)
         };
 
-        platformBitmap = Bitmap.createScaledBitmap(BitmapFactory.decodeResource(getResources(), R.drawable.platform), characterWidth, characterHeight, true);
         platformBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.platform);
+
+
+        backgroundBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.bg);
+        backgroundBitmap = Bitmap.createScaledBitmap(backgroundBitmap, screenWidth, screenHeight, true);
+
 
 
 
@@ -160,8 +168,6 @@ public class MainActivity extends AppCompatActivity {
                 voiceStrength = Math.max(0, rmsdB); // Ensure non-negative value
             }
 
-
-
             @Override
             public void onBufferReceived(byte[] buffer) {}
 
@@ -186,6 +192,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onEvent(int eventType, Bundle params) {}
+
         });
 
         if (speechRecognizer == null) {
@@ -195,6 +202,21 @@ public class MainActivity extends AppCompatActivity {
 
         btnRestart.setOnClickListener(v -> restartGame());
         startGame();
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        if (event.getAction() == MotionEvent.ACTION_DOWN) {
+            if (isOnPlatform && canJump) { // Same logic as voice activation
+                isOnPlatform = false;
+                canJump = false;
+                characterVelocity = -50; // Jump height
+
+                // Delay before allowing another jump
+                new Handler().postDelayed(() -> canJump = true, 300);
+            }
+        }
+        return super.onTouchEvent(event);
     }
 
     private void startListening() {
@@ -252,7 +274,7 @@ public class MainActivity extends AppCompatActivity {
                             canvas.drawColor(Color.WHITE); // Clear the canvas
 
                             // Handle Jumping (Prevent Double Jump)
-                            if (voiceStrength > 9 && isOnPlatform && canJump) {
+                            if (voiceStrength > 9.99 && isOnPlatform && canJump) {
                                 isOnPlatform = false;
                                 canJump = false;
                                 characterVelocity = -Math.min(voiceStrength * 5.5f, 45);
@@ -272,8 +294,6 @@ public class MainActivity extends AppCompatActivity {
                             }
 
 
-
-
                             // Check for Collisions with Platforms
                             for (Platform platform : platforms) {
                                 int hitboxBottom = hitboxY + hitboxHeight;
@@ -288,6 +308,7 @@ public class MainActivity extends AppCompatActivity {
                                         lastPlatform = platform;
                                     }
                                     isOnPlatform = true;
+                                    canJump = true;
                                     hitboxY = platform.y - hitboxHeight; // Align hitbox on top
                                     characterVelocity = 0;
                                 }
@@ -315,10 +336,15 @@ public class MainActivity extends AppCompatActivity {
 
 
                             // Move Platforms Left
-                            for (Platform platform : platforms) {
-                                platform.x -= 15f + (maxPlatformSpeed - 10f) * Math.min(score / (float) maxScore, 1f);;
+                             // Track when game starts
 
+                            for (Platform platform : platforms) {
+                                long elapsedTime = System.currentTimeMillis() - startTime; // Get elapsed time in milliseconds
+                                float timeFactor = Math.min(elapsedTime / 30000f, 1f); // Scale up over 30 seconds (adjust as needed)
+
+                                platform.x -= 15f + (maxPlatformSpeed - 10f) * timeFactor;
                             }
+
 
                             // Remove Platforms that Move Off-Screen
                             platforms.removeIf(platform -> platform.x + platform.width < 0);
@@ -340,20 +366,37 @@ public class MainActivity extends AppCompatActivity {
                                 currentFrame = characterRunFrames[frameIndex];
                             }
 
-                            // Draw Character
+                            backgroundX -= backgroundSpeed;
 
+                            // Reset position for infinite scrolling
+                            if (backgroundX <= -screenWidth) {
+                                backgroundX = 0;
+                            }
+
+                            // Draw Background
+                            canvas.drawBitmap(backgroundBitmap, backgroundX, 0, null);
+                            canvas.drawBitmap(backgroundBitmap, backgroundX + screenWidth, 0, null);
+
+                            // Draw Character
                             canvas.drawBitmap(currentFrame, hitboxX - 10, hitboxY - 35,null);
 
+                            float cornerRadius = 30f;
                             // Draw Hitbox (DEBUGGING)
                             paint.setColor(Color.BLUE); // Change to any color you like
                             paint.setStyle(Paint.Style.STROKE); // Outline instead of fill
                             paint.setStrokeWidth(5); // Thickness of the hitbox line
-                            canvas.drawRect(hitboxX, hitboxY, hitboxX + hitboxWidth, hitboxY + hitboxHeight, paint);
+                            canvas.drawRoundRect(
+                                    hitboxX, hitboxY,
+                                    hitboxX + hitboxWidth, hitboxY + hitboxHeight,
+                                    cornerRadius, cornerRadius, paint
+                            );
 
                             // Draw Platforms
                             paint.setColor(Color.RED);
                             for (Platform platform : platforms) {
-                                canvas.drawRect(platform.x, platform.y, platform.x + platform.width, platform.y + platform.height, paint);
+                                // canvas.drawRect(platform.x, platform.y, platform.x + platform.width, platform.y + platform.height, paint);
+                                platformBitmap = Bitmap.createScaledBitmap(platformBitmap, platform.width, platform.height, false);
+                                canvas.drawBitmap(platformBitmap, platform.x, platform.y, null);
                             }
                         }
                     }
@@ -405,7 +448,18 @@ public class MainActivity extends AppCompatActivity {
                 ? 700
                 : platforms.get(platforms.size() - 1).x + platforms.get(platforms.size() - 1).width;
 
-        int spacing = Math.min(400, 450 + (int)(score * 0.5)); // Increase spacing slightly as score increases
+        // Time-based speed increase (smooth acceleration)
+        float timeElapsed = (System.currentTimeMillis() - startTime) / 1000f; // Time in seconds
+        float platformSpeed = 15f + (maxPlatformSpeed - 15f) * (1 - (float) Math.exp(-timeElapsed / 10f));
+
+        // Adjust platform spacing proportionally
+        int baseSpacing = 400;
+        float speedFactor = (platformSpeed - 15f) / (maxPlatformSpeed - 15f); // Normalized speed (0 to 1)
+
+
+        int spacing = (int) (baseSpacing + speedFactor * 200); // Adjust as needed
+        spacing = Math.min(spacing, 1000);
+
         platformX += spacing;
 
         platforms.add(new Platform(platformX, platformY, platformWidth, platformHeight));
@@ -448,6 +502,16 @@ public class MainActivity extends AppCompatActivity {
         characterVelocity = 0;
         isOnPlatform = true;
 
+        // Reset the start time (IMPORTANT)
+        startTime = System.currentTimeMillis();
+
+        // Re-add the starting platform
+        int initialPlatformWidth = 400;
+        int initialPlatformHeight = 100 + screenHeight;
+        int initialPlatformX = 80;
+        int initialPlatformY = characterY + 50;
+        platforms.add(new Platform(initialPlatformX, initialPlatformY, initialPlatformWidth, initialPlatformHeight));
+
         // Hide the restart button
         btnRestart.setVisibility(Button.GONE);
 
@@ -458,6 +522,7 @@ public class MainActivity extends AppCompatActivity {
             surfaceHolder.unlockCanvasAndPost(canvas);
         }
     }
+
 
     private void restartGame() {
         // Stop the current game loop
@@ -472,10 +537,13 @@ public class MainActivity extends AppCompatActivity {
         isOnPlatform = true;
 
         // Reset character & hitbox positions
-        characterX = 150;  // Set this to your original starting X position
-        characterY = 1500; // Original starting Y position
+        characterX = 150;
+        characterY = 1500;
         hitboxX = characterX + 10;
-        hitboxY = characterY - 135; // Adjust to your original hitbox placement
+        hitboxY = characterY - 135;
+
+        // Reset the start time to 0 (IMPORTANT)
+        startTime = System.currentTimeMillis();
 
         // Clear platforms and re-add the starting platform
         platforms.clear();

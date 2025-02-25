@@ -3,28 +3,109 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!-- Game Surface -->
     <SurfaceView
         android:id="@+id/gameSurface"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- Score Display with Rounded Background -->
     <TextView
         android:id="@+id/scoreText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:background="@drawable/rounded_score_bg"
+        android:padding="10dp"
         android:layout_alignParentTop="true"
         android:layout_marginStart="16dp"
         android:layout_marginTop="8dp"
         android:text="Score: 0"
         android:textSize="22sp"
-        android:textColor="#000" />
+        android:textColor="#FFF"
+        android:gravity="center" />
 
-    <Button
-        android:id="@+id/btnRestart"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Restart"
-        android:visibility="gone"
-        android:layout_centerInParent="true" />
+    <!-- Pause Button with Custom Image -->
+    <ImageButton
+        android:id="@+id/btnPause"
+        android:layout_width="51dp"
+        android:layout_height="56dp"
+        android:layout_alignParentEnd="true"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="16dp"
+        android:background="@null"
+        android:scaleType="fitCenter"
+        android:src="@drawable/pause" />
+
+    <!-- Pause Menu Overlay (Initially Hidden) -->
+    <RelativeLayout
+        android:id="@+id/pauseMenu"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#AA000000"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/pauseText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Game Paused"
+            android:textSize="24sp"
+            android:textColor="#FFF"
+            android:layout_centerHorizontal="true"
+            android:layout_marginTop="150dp"/>
+
+        <Button
+            android:id="@+id/btnResume"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Resume"
+            android:layout_below="@id/pauseText"
+            android:layout_centerHorizontal="true"
+            android:layout_marginTop="20dp"/>
+    </RelativeLayout>
+
+    <RelativeLayout
+        android:id="@+id/gameOverMenu"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#AA000000"
+        android:visibility="gone">
+
+        <!-- "Game Over" Text -->
+        <TextView
+            android:id="@+id/gameOverText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Game Over"
+            android:textSize="30sp"
+            android:textStyle="bold"
+            android:textColor="#FFF"
+            android:layout_centerHorizontal="true"
+            android:layout_marginTop="150dp"/>
+
+        <!-- Final Score Display -->
+        <TextView
+            android:id="@+id/finalScoreText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Final Score: 0"
+            android:textSize="22sp"
+            android:textColor="#FFF"
+            android:layout_below="@id/gameOverText"
+            android:layout_centerHorizontal="true"
+            android:layout_marginTop="20dp"/>
+
+        <!-- Restart Button -->
+        <Button
+            android:id="@+id/btnRestart"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Restart"
+            android:layout_below="@id/btnResume"
+            android:layout_centerHorizontal="true"
+            android:layout_centerVertical="true"
+            android:textSize="20sp"
+            android:gravity="center"/>
+    </RelativeLayout>
 
 </RelativeLayout>

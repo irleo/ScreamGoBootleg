@@ -1,6 +1,7 @@
 package com.game3.voicecontrolledgame;
 
 import android.Manifest;
+import android.app.MediaRouteButton;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -19,6 +20,8 @@ import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.widget.Button;
+import android.widget.ImageButton;
+import android.widget.RelativeLayout;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -32,8 +35,7 @@ public class MainActivity extends AppCompatActivity {
     private SurfaceView gameSurface;
     private SurfaceHolder surfaceHolder;
     private Paint paint;
-    private int characterY = 1500;
-    private int characterX = 150;
+
     private float voiceStrength = 0f;
 
     private int score = 0;
@@ -44,10 +46,6 @@ public class MainActivity extends AppCompatActivity {
 
     private Handler gameHandler = new Handler();
     private Runnable gameLoop;
-
-    private TextView scoreText;
-    private Button btnRestart;
-
     private List<Platform> platforms = new ArrayList<>();
     private Platform standingPlatform;
     private Handler scoreHandler = new Handler(Looper.getMainLooper());
@@ -57,7 +55,7 @@ public class MainActivity extends AppCompatActivity {
     private final int maxScore = 1200; // Score at which max speed is reached
     private boolean isOnPlatform;
     private float characterVelocity = 0f; // Vertical velocity
-    private float gravity = 2.5f;  // Gravity acceleration
+    private float gravity = 2.4f;  // Gravity acceleration
     private final float jumpMultiplier = 23f; // Adjust jump strength
 
     private final float maxGravity = 2f ;  // Maximum gravity cap
@@ -66,23 +64,31 @@ public class MainActivity extends AppCompatActivity {
     private int frameIndex = 0;
     private long lastFrameTime = 0;
     private int frameDelay = 100;
-    int characterWidth = 185; // Set your desired width
-    int characterHeight = 225; // Set your desired height
     private Platform lastPlatform = null;
-    private boolean canJump = true; // Cooldown flag
+    private boolean canJump = true;
     private Bitmap characterBitmap, backgroundBitmap;
 
     // Hitbox
-    int hitboxWidth = characterWidth - 40;  // Adjust width
+    private int characterY = 1510;
+    private int characterX = 150;
+    int characterWidth = 180; // Set your desired width
+    int characterHeight = 225; // Set your desired height
+    int hitboxWidth = characterWidth - 35;  // Adjust width
     int hitboxHeight = characterHeight - 45; // Adjust height
-    int hitboxX = characterX + 10; // Center hitbox inside sprite
+    int hitboxX = characterX + 25; // Center hitbox inside sprite
     int hitboxY = characterY - 135; // Adjust vertical alignment
     private int backgroundX = 0;
-    private int backgroundSpeed = 5;
     long startTime = System.currentTimeMillis();
+
+    // Menus
+    Button btnResume, btnRestart;
+    RelativeLayout pauseMenu, gameOverMenu;
+    private TextView scoreText, finalScoreText;
+    boolean isPaused = false;
 
 
     private static class Platform {
+        public Bitmap scaledBitmap;
         int x, y, width, height;
 
         Platform(int x, int y, int width, int height) {
@@ -116,12 +122,32 @@ public class MainActivity extends AppCompatActivity {
 
         getScreenDimensions();
 
+        ImageButton btnPause = findViewById(R.id.btnPause);
+        btnResume = findViewById(R.id.btnResume);
+        btnRestart = findViewById(R.id.btnRestart);
+        pauseMenu = findViewById(R.id.pauseMenu);
+        gameOverMenu = findViewById(R.id.gameOverMenu);
+
         gameSurface = findViewById(R.id.gameSurface);
         surfaceHolder = gameSurface.getHolder();
         paint = new Paint();
 
         scoreText = findViewById(R.id.scoreText);
-        btnRestart = findViewById(R.id.btnRestart);
+        finalScoreText = findViewById(R.id.finalScoreText);
+
+        btnPause.setOnClickListener(v -> {
+            isPaused = true;
+            pauseGame();
+        });
+
+        btnResume.setOnClickListener(v -> {
+            isPaused = false;
+            resumeGame();
+        });
+
+        btnRestart.setOnClickListener(v -> {
+            restartGame();
+        });
 
         characterRunFrames = new Bitmap[]{
                 Bitmap.createScaledBitmap(BitmapFactory.decodeResource(getResources(), R.drawable.char1), characterWidth, characterHeight, true),
@@ -140,9 +166,6 @@ public class MainActivity extends AppCompatActivity {
 
         backgroundBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.bg);
         backgroundBitmap = Bitmap.createScaledBitmap(backgroundBitmap, screenWidth, screenHeight, true);
-
-
-
 
 
         // Check microphone permissions
@@ -207,13 +230,10 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (event.getAction() == MotionEvent.ACTION_DOWN) {
-            if (isOnPlatform && canJump) { // Same logic as voice activation
+            if (isOnPlatform && canJump) {  // Ensure the character is only allowed to jump when touching a platform
                 isOnPlatform = false;
-                canJump = false;
+                canJump = false; // Prevent additional jumps until landing
                 characterVelocity = -50; // Jump height
-
-                // Delay before allowing another jump
-                new Handler().postDelayed(() -> canJump = true, 300);
             }
         }
         return super.onTouchEvent(event);
@@ -233,15 +253,6 @@ public class MainActivity extends AppCompatActivity {
         // Restart listening if needed, even during silence
         speechRecognizer.startListening(intent);
     }
-    /**
-     private void updatePlatformSpeed() {
-     // Gradually increase speed based on the score
-     platformSpeed = 15f + (maxPlatformSpeed - 10f) * Math.min(score / (float) maxScore, 1f);
-     gravity = 1f + (maxGravity - .1f) * Math.min(score / (float) maxScore, 1f);
-     gravity = Math.min(gravity, maxGravity);
-     }
-     **/
-
 
     private void startGame() {
         resetGame(); // Clear all previous data before starting
@@ -249,14 +260,14 @@ public class MainActivity extends AppCompatActivity {
 
         // Create the initial platform
         int initialPlatformWidth = 400;
-        int initialPlatformHeight = 100 + screenHeight;
+        int initialPlatformHeight = screenHeight - 1;
         int initialPlatformX = 80; // Align with character's X position
         int initialPlatformY = characterY + 50; // Slightly below the character
         platforms.add(new Platform(initialPlatformX, initialPlatformY, initialPlatformWidth, initialPlatformHeight));
 
         // Create the initial standing platform
-        int standingPlatformWidth = screenWidth;
-        int standingPlatformHeight = 1 + screenHeight;
+        int standingPlatformWidth = 1;
+        int standingPlatformHeight = 1;
         int standingPlatformX = 0;
         int standingPlatformY = characterY + 50;
         standingPlatform = new Platform(standingPlatformX, standingPlatformY, standingPlatformWidth, standingPlatformHeight);
@@ -274,13 +285,9 @@ public class MainActivity extends AppCompatActivity {
                             canvas.drawColor(Color.WHITE); // Clear the canvas
 
                             // Handle Jumping (Prevent Double Jump)
-                            if (voiceStrength > 9.99 && isOnPlatform && canJump) {
+                            if (voiceStrength > 9.99 && isOnPlatform) { // Remove 'canJump'
                                 isOnPlatform = false;
-                                canJump = false;
                                 characterVelocity = -Math.min(voiceStrength * 5.5f, 45);
-
-                                // Delay before allowing another jump
-                                new Handler().postDelayed(() -> canJump = true, 300);
                             }
 
                             // Apply Gravity Smoothly
@@ -290,7 +297,7 @@ public class MainActivity extends AppCompatActivity {
                             // Prevent Falling Through the Bottom of the Screen
                             if (hitboxY >= screenHeight) {
                                 isPlaying = false;
-                                btnRestart.setVisibility(Button.VISIBLE);
+                                gameOver();
                             }
 
 
@@ -298,56 +305,68 @@ public class MainActivity extends AppCompatActivity {
                             for (Platform platform : platforms) {
                                 int hitboxBottom = hitboxY + hitboxHeight;
                                 boolean isAbovePlatform = hitboxY < platform.y;
-                                boolean isWithinPlatformWidth = hitboxX + hitboxWidth >= platform.x && hitboxX <= platform.x + platform.width;
+                                boolean isWithinPlatformWidth = hitboxX + hitboxWidth * 0.8f >= platform.x && hitboxX + hitboxWidth * 0.2f <= platform.x + platform.width;
 
-                                // **LANDING CHECK (Using Hitbox Instead of Bitmap)**
-                                if (hitboxBottom >= platform.y && isAbovePlatform && isWithinPlatformWidth) {
-                                    if (!isOnPlatform) { // Score only when transitioning from air to platform
-                                        score += 10;
-                                        scoreText.setText("Score: " + score);
-                                        lastPlatform = platform;
+                                // **LANDING CHECK (Prevent Snapping from Side)**
+                                if (platform.x + platform.width > 0) {
+                                    if (hitboxBottom >= platform.y && isAbovePlatform && isWithinPlatformWidth) {
+                                        if (!isOnPlatform) { // Score only when transitioning from air to platform
+                                            score += 10;
+                                            scoreText.setText("Score: " + score);
+                                            lastPlatform = platform;
+                                        }
+                                        isOnPlatform = true;
+                                        canJump = true;
+                                        hitboxY = platform.y - hitboxHeight; // Align hitbox on top
+                                        hitboxX -= platformSpeed;
+                                        characterVelocity = 0;
                                     }
-                                    isOnPlatform = true;
-                                    canJump = true;
-                                    hitboxY = platform.y - hitboxHeight; // Align hitbox on top
-                                    characterVelocity = 0;
                                 }
 
-                                boolean hitsLeftSide = hitboxX + hitboxWidth > platform.x
+                                // PARTIAL SIDE COLLISION CHECK
+                                int sideCollisionHeight = platform.height / 3;  // Only top 1/3 of the platform is solid on the sides
+                                int buffer = (int) (hitboxWidth * 0.1); // Convert buffer to int to avoid type mismatch
+
+                                boolean hitsLeftSide = hitboxX + hitboxWidth - buffer > platform.x  // Apply buffer
                                         && hitboxX < platform.x
                                         && hitboxY + hitboxHeight > platform.y
-                                        && hitboxY < platform.y + platform.height;
+                                        && hitboxY < platform.y + sideCollisionHeight;  // Check only top portion
 
-                                boolean hitsRightSide = hitboxX < platform.x + platform.width
+                                boolean hitsRightSide = hitboxX + buffer < platform.x + platform.width + buffer // Apply buffer
                                         && hitboxX + hitboxWidth > platform.x + platform.width
                                         && hitboxY + hitboxHeight > platform.y
-                                        && hitboxY < platform.y + platform.height;
+                                        && hitboxY < platform.y + sideCollisionHeight;
 
-                                if (hitsLeftSide || hitsRightSide) {
-                                    hitboxX = (hitsLeftSide) ? platform.x - hitboxWidth : platform.x + platform.width;
+                                if (hitsLeftSide) {
+                                    hitboxX = platform.x - hitboxWidth + buffer; // Prevent sticking
+                                    isOnPlatform = false;
+                                    canJump = false;
                                 }
-                            }
 
-                            // If no platform was landed on, keep falling
-                            if (!isOnPlatform) {
-                                characterVelocity += gravity;
-                                hitboxY += characterVelocity;
-                            }
+                                if (platform.x < -platform.width) {
+                                    platforms.remove(platform); // Remove safely
+                                }
 
-
-                            // Move Platforms Left
-                             // Track when game starts
-
-                            for (Platform platform : platforms) {
+                                // Platform movement
                                 long elapsedTime = System.currentTimeMillis() - startTime; // Get elapsed time in milliseconds
                                 float timeFactor = Math.min(elapsedTime / 30000f, 1f); // Scale up over 30 seconds (adjust as needed)
 
                                 platform.x -= 15f + (maxPlatformSpeed - 10f) * timeFactor;
                             }
 
-
                             // Remove Platforms that Move Off-Screen
                             platforms.removeIf(platform -> platform.x + platform.width < 0);
+
+                            // If no platform was landed on, keep falling
+
+                            if (!isOnPlatform) {
+                                characterVelocity += gravity;
+                                hitboxY += characterVelocity;
+                            }
+
+                            if (!canJump) {
+                                isOnPlatform = false;
+                            }
 
                             // Generate New Platforms
                             if (!platforms.isEmpty() && platforms.get(platforms.size() - 1).x < gameSurface.getWidth() - 300) {
@@ -366,11 +385,11 @@ public class MainActivity extends AppCompatActivity {
                                 currentFrame = characterRunFrames[frameIndex];
                             }
 
-                            backgroundX -= backgroundSpeed;
+                            backgroundX -= platformSpeed + 5;
 
                             // Reset position for infinite scrolling
                             if (backgroundX <= -screenWidth) {
-                                backgroundX = 0;
+                                backgroundX = (int)((backgroundX - platformSpeed - 5) % screenWidth);
                             }
 
                             // Draw Background
@@ -378,25 +397,28 @@ public class MainActivity extends AppCompatActivity {
                             canvas.drawBitmap(backgroundBitmap, backgroundX + screenWidth, 0, null);
 
                             // Draw Character
-                            canvas.drawBitmap(currentFrame, hitboxX - 10, hitboxY - 35,null);
+                            canvas.drawBitmap(currentFrame, hitboxX - 5, hitboxY - 35,null);
 
-                            float cornerRadius = 30f;
-                            // Draw Hitbox (DEBUGGING)
-                            paint.setColor(Color.BLUE); // Change to any color you like
-                            paint.setStyle(Paint.Style.STROKE); // Outline instead of fill
-                            paint.setStrokeWidth(5); // Thickness of the hitbox line
-                            canvas.drawRoundRect(
-                                    hitboxX, hitboxY,
-                                    hitboxX + hitboxWidth, hitboxY + hitboxHeight,
-                                    cornerRadius, cornerRadius, paint
-                            );
+//                            float cornerRadius = 70f;
+//                            // Draw Hitbox (DEBUGGING)
+//                            paint.setColor(Color.BLUE); // Change to any color you like
+//                            paint.setStyle(Paint.Style.STROKE); // Outline instead of fill
+//                            paint.setStrokeWidth(5); // Thickness of the hitbox line
+//                            canvas.drawRoundRect(
+//                                    hitboxX, hitboxY,
+//                                    hitboxX + hitboxWidth, hitboxY + hitboxHeight,
+//                                    cornerRadius, cornerRadius, paint
+//                            );
+
 
                             // Draw Platforms
                             paint.setColor(Color.RED);
                             for (Platform platform : platforms) {
-                                // canvas.drawRect(platform.x, platform.y, platform.x + platform.width, platform.y + platform.height, paint);
                                 platformBitmap = Bitmap.createScaledBitmap(platformBitmap, platform.width, platform.height, false);
-                                canvas.drawBitmap(platformBitmap, platform.x, platform.y, null);
+                                if (platform.scaledBitmap == null) { // Only scale once
+                                    platform.scaledBitmap = Bitmap.createScaledBitmap(platformBitmap, platform.width, platform.height, false);
+                                }
+                                canvas.drawBitmap(platform.scaledBitmap, platform.x, platform.y, null);
                             }
                         }
                     }
@@ -419,67 +441,51 @@ public class MainActivity extends AppCompatActivity {
     private void generateRandomPlatform() {
         Random random = new Random();
 
-        int platformHeight = 1 + screenHeight;
-        int platformWidth = random.nextInt(200) + 180;
+//        int platformHeight = 120 + random.nextInt(90);
+        int platformWidth = random.nextInt(160) + 120;
 
-        // Y pos
+        // Y Position Calculation (Ensure Platform is Above Character)
         int platformY;
         if (score >= 150) {
-            // Choose between front of character and slightly above
             int choice = random.nextInt(3);
             if (choice == 0) {
-                platformY = standingPlatform.y - 100; // Front of the character
+                platformY = standingPlatform.y - 80; // Front
             } else if (choice == 1) {
-                platformY = standingPlatform.y - 150; // Mid
+                platformY = standingPlatform.y - 130; // Mid
             } else {
-                platformY = standingPlatform.y - 300; // Higher
+                platformY = standingPlatform.y - 180; // Higher
             }
         } else if (score >= 50) {
             platformY = random.nextBoolean()
-                    ? standingPlatform.y - 100 // Front of character
-                    : standingPlatform.y - 300; // Slightly above character
+                    ? standingPlatform.y - 100
+                    : standingPlatform.y - 200;
         } else {
-            // Always generate in front of the character initially
-            platformY = standingPlatform.y - random.nextInt(150) + 70;
+            platformY = standingPlatform.y - (random.nextInt(200) + 90);
         }
 
-        // X pos
-        int platformX = platforms.isEmpty()
-                ? 700
-                : platforms.get(platforms.size() - 1).x + platforms.get(platforms.size() - 1).width;
+        int platformHeight = screenHeight - platformY;
 
-        // Time-based speed increase (smooth acceleration)
+        // X Position Calculation (Ensure Proper Spacing)
+        int lastPlatformX = platforms.isEmpty() ? 700 : platforms.get(platforms.size() - 1).x;
+        int lastPlatformWidth = platforms.isEmpty() ? 0 : platforms.get(platforms.size() - 1).width;
+
+        // Speed-based Platform Generation
         float timeElapsed = (System.currentTimeMillis() - startTime) / 1000f; // Time in seconds
-        float platformSpeed = 15f + (maxPlatformSpeed - 15f) * (1 - (float) Math.exp(-timeElapsed / 10f));
+        float platformSpeed = 15f + (maxPlatformSpeed - 15f) * (timeElapsed / 30f); // Linear speed increase
+        platformSpeed = Math.min(platformSpeed, maxPlatformSpeed); // Cap at max speed
 
-        // Adjust platform spacing proportionally
-        int baseSpacing = 400;
-        float speedFactor = (platformSpeed - 15f) / (maxPlatformSpeed - 15f); // Normalized speed (0 to 1)
+        // Adjust platform spacing
+        int minSpacing = 380;
+        int maxSpacing = 1000;
+        float speedFactor = (platformSpeed - 15f) / (maxPlatformSpeed - 15f);
+        int spacing = minSpacing + (int) ((maxSpacing - minSpacing) * speedFactor);
 
+        int platformX = lastPlatformX + lastPlatformWidth + spacing;
 
-        int spacing = (int) (baseSpacing + speedFactor * 200); // Adjust as needed
-        spacing = Math.min(spacing, 1000);
-
-        platformX += spacing;
-
+        // Add new platform
         platforms.add(new Platform(platformX, platformY, platformWidth, platformHeight));
     }
 
-    private void startScoring() {
-        scoreRunnable = new Runnable() {
-            @Override
-            public void run() {
-                if (isPlaying) {
-                    score = 0; // Increment score by 1
-                    scoreText.setText("Score: " + score); // Update the score display
-
-                    // Schedule the next score increment after 1 second
-                    scoreHandler.postDelayed(this, 100);
-                }
-            }
-        };
-        scoreHandler.post(scoreRunnable); // Start the scoring
-    }
 
 
     private void stopScoring() {
@@ -507,7 +513,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Re-add the starting platform
         int initialPlatformWidth = 400;
-        int initialPlatformHeight = 100 + screenHeight;
+        int initialPlatformHeight = screenHeight - 1;
         int initialPlatformX = 80;
         int initialPlatformY = characterY + 50;
         platforms.add(new Platform(initialPlatformX, initialPlatformY, initialPlatformWidth, initialPlatformHeight));
@@ -533,22 +539,22 @@ public class MainActivity extends AppCompatActivity {
         score = 0;
         scoreText.setText("Score: " + score);
         characterVelocity = 0;
-        gravity = 2.5f;
+        gravity = 2.4f;
         isOnPlatform = true;
 
         // Reset character & hitbox positions
         characterX = 150;
-        characterY = 1500;
-        hitboxX = characterX + 10;
+        characterY = 1510;
+        hitboxX = characterX + 25;
         hitboxY = characterY - 135;
 
-        // Reset the start time to 0 (IMPORTANT)
+        // Reset the start time to 0
         startTime = System.currentTimeMillis();
 
         // Clear platforms and re-add the starting platform
         platforms.clear();
         int initialPlatformWidth = 400;
-        int initialPlatformHeight = 100 + screenHeight;
+        int initialPlatformHeight = screenHeight - 1;
         int initialPlatformX = 80;
         int initialPlatformY = characterY + 50;
         platforms.add(new Platform(initialPlatformX, initialPlatformY, initialPlatformWidth, initialPlatformHeight));
@@ -569,19 +575,32 @@ public class MainActivity extends AppCompatActivity {
                 isPlaying = true;
                 startGame();
             }
-        }, 100); // Small delay to ensure reset completes properly
+        }, 120); // Small delay to ensure reset completes properly
+
+        gameOverMenu.setVisibility(Button.GONE);
     }
 
+    // Pauses the game
+    private void pauseGame() {
+        isPlaying = false;  // Stop game loop
+        pauseMenu.setVisibility(RelativeLayout.VISIBLE);
+    }
 
+    // Resumes the game
+    private void resumeGame() {
+        isPlaying = true;
+        pauseMenu.setVisibility(Button.GONE);
+        gameHandler.post(gameLoop);  // Resume game loop
+    }
 
-    private void endGame() {
+    private void gameOver() {
         isPlaying = false;  // Stop the game
-        btnRestart.setVisibility(Button.VISIBLE);  // Show the restart button
+        finalScoreText.setText("Final Score: " + score);
+        gameOverMenu.setVisibility(RelativeLayout.VISIBLE);  // Show the restart button
+        btnRestart.setVisibility(Button.VISIBLE);
+        gameHandler.removeCallbacks(gameLoop);
         speechRecognizer.stopListening();  // Stop listening for voice commands
-        stopScoring();
         Toast.makeText(this, "Game Over", Toast.LENGTH_SHORT).show();  // Show a "Game Over" message
-
-
     }
 
     @Override

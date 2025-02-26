@@ -1,7 +1,6 @@
 package com.game3.voicecontrolledgame;
 
 import android.Manifest;
-import android.app.MediaRouteButton;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -9,6 +8,7 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.PorterDuff;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -16,10 +16,10 @@ import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 import android.util.Log;
-import android.view.Menu;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.View;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.RelativeLayout;
@@ -40,7 +40,7 @@ public class MainActivity extends AppCompatActivity {
     private float voiceStrength = 0f;
 
     private int score = 0;
-    private boolean isPlaying = true;
+    private boolean isPlaying = false;
 
     private SpeechRecognizer speechRecognizer;
     private boolean isListening = false;
@@ -66,8 +66,11 @@ public class MainActivity extends AppCompatActivity {
     private int frameDelay = 100;
     private Platform lastPlatform = null;
     private boolean canJump = true;
-    private Bitmap[] characterRunFrames, characterJumpFrames;
-    private Bitmap characterBitmap, backgroundBitmap, platformBitmap, flowerBitmap;
+    private Bitmap[] characterRunFrames, characterJumpFrames, flowerBitmaps;
+    private Bitmap characterBitmap, backgroundBitmap, platformBitmap;
+    private Set<Platform> usedPlatforms = new HashSet<>(); // Move this outside the method
+    private int flowerX, flowerY;
+
 
     // Hitbox
     private int characterY = 1510;
@@ -82,7 +85,8 @@ public class MainActivity extends AppCompatActivity {
     long startTime = System.currentTimeMillis();
 
     // Menus
-    Button btnResume, btnRestart;
+    Button btnResume, btnRestart, startButton;
+    ImageButton btnPause;
     RelativeLayout pauseMenu, gameOverMenu;
     private TextView scoreText, finalScoreText;
     boolean isPaused = false;
@@ -104,11 +108,17 @@ public class MainActivity extends AppCompatActivity {
         public Bitmap scaledBitmap;
         int x, y, width, height;
 
-        public Flower(int x, int y, int width, int height) {
+        public Flower(int x, int y, int width, Bitmap[] bitmaps) {
             this.x = x;
             this.y = y;
             this.width = width;
-            this.height = height;
+
+            // Assign a random bitmap from the array
+            int randomIndex = new Random().nextInt(bitmaps.length);
+            Bitmap originalBitmap = bitmaps[randomIndex];
+
+            // Scale the selected bitmap
+            this.scaledBitmap = Bitmap.createScaledBitmap(originalBitmap, width * 4, width * 4, false);
         }
     }
 
@@ -136,11 +146,12 @@ public class MainActivity extends AppCompatActivity {
 
         getScreenDimensions();
 
-        ImageButton btnPause = findViewById(R.id.btnPause);
+        btnPause = findViewById(R.id.btnPause);
         btnResume = findViewById(R.id.btnResume);
         btnRestart = findViewById(R.id.btnRestart);
         pauseMenu = findViewById(R.id.pauseMenu);
         gameOverMenu = findViewById(R.id.gameOverMenu);
+        startButton = findViewById(R.id.btnStartGame);
 
         gameSurface = findViewById(R.id.gameSurface);
         surfaceHolder = gameSurface.getHolder();
@@ -163,6 +174,12 @@ public class MainActivity extends AppCompatActivity {
             restartGame();
         });
 
+        startButton.setOnClickListener(v -> {
+            isPlaying = true;
+            startButton.setVisibility(Button.GONE); // Hide the button after starting
+            startGame(); // Start the game loop
+        });
+
         characterRunFrames = new Bitmap[]{
                 Bitmap.createScaledBitmap(BitmapFactory.decodeResource(getResources(), R.drawable.char1), characterWidth, characterHeight, true),
                 Bitmap.createScaledBitmap(BitmapFactory.decodeResource(getResources(), R.drawable.char2), characterWidth, characterHeight, true),
@@ -175,8 +192,14 @@ public class MainActivity extends AppCompatActivity {
                 Bitmap.createScaledBitmap(BitmapFactory.decodeResource(getResources(), R.drawable.char_land), characterWidth, characterHeight, true)
         };
 
+        flowerBitmaps = new Bitmap[]{
+                BitmapFactory.decodeResource(getResources(), R.drawable.cosmos),
+                BitmapFactory.decodeResource(getResources(), R.drawable.flower11),
+                BitmapFactory.decodeResource(getResources(), R.drawable.flower),
+                BitmapFactory.decodeResource(getResources(), R.drawable.jasmin)
+        };
+
         platformBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.platform);
-        flowerBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.flower);
 
         backgroundBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.bg);
         backgroundBitmap = Bitmap.createScaledBitmap(backgroundBitmap, screenWidth, screenHeight, true);
@@ -234,20 +257,18 @@ public class MainActivity extends AppCompatActivity {
 
         if (speechRecognizer == null) {
             Toast.makeText(this, "SpeechRecognizer not initialized", Toast.LENGTH_SHORT).show();
-            return;
         }
-
-        btnRestart.setOnClickListener(v -> restartGame());
-        startGame();
     }
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        if (!isPlaying) return true; // Ignore touch input if game hasn't started
+
         if (event.getAction() == MotionEvent.ACTION_DOWN) {
-            if (isOnPlatform && canJump) {  // Ensure the character is only allowed to jump when touching a platform
+            if (isOnPlatform && canJump) {
                 isOnPlatform = false;
-                canJump = false; // Prevent additional jumps until landing
-                characterVelocity = -50; // Jump height
+                canJump = false;
+                characterVelocity = -50;
             }
         }
         return super.onTouchEvent(event);
@@ -271,6 +292,8 @@ public class MainActivity extends AppCompatActivity {
     private void startGame() {
         resetGame(); // Clear all previous data before starting
         startListening(); // Start voice recognition
+        scoreText.setVisibility(View.VISIBLE);
+        btnPause.setVisibility(Button.VISIBLE);
 
         // Create the initial platform
         int initialPlatformWidth = 400;
@@ -296,12 +319,12 @@ public class MainActivity extends AppCompatActivity {
                     if (surfaceHolder.getSurface().isValid()) {
                         canvas = surfaceHolder.lockCanvas();
                         if (canvas != null) {
-                            canvas.drawColor(Color.WHITE); // Clear the canvas
+                            canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR); // Clear the canvas
 
                             // Handle Jumping (Prevent Double Jump)
                             if (voiceStrength > 9.99 && isOnPlatform) { // Remove 'canJump'
                                 isOnPlatform = false;
-                                characterVelocity = -Math.min(voiceStrength * 5.5f, 45);
+                                characterVelocity = -Math.min(voiceStrength * 5.5f, 50);
                             }
 
                             // Apply Gravity Smoothly
@@ -325,7 +348,7 @@ public class MainActivity extends AppCompatActivity {
                                 boolean isWithinPlatformWidth = hitboxX + hitboxWidth * 0.8f >= platform.x
                                         && hitboxX + hitboxWidth * 0.2f <= platform.x + platform.width;
 
-                                // **Remove Platforms That Move Off-Screen**
+                                // Remove Platforms That Move Off-Screen**
                                 if (platform.x + platform.width < 0) {
                                     platformIterator.remove();
                                     continue;
@@ -333,7 +356,7 @@ public class MainActivity extends AppCompatActivity {
 
                                 // LANDING CHECK
                                 if (platform.x + platform.width > 0) {
-                                    if (hitboxBottom >= platform.y && isAbovePlatform && isWithinPlatformWidth) {
+                                    if (hitboxBottom >= platform.y - 5 && isAbovePlatform && isWithinPlatformWidth) {
                                         if (!isOnPlatform) { // Score only when transitioning from air to platform
                                             score += 10;
                                             scoreText.setText("Score: " + score);
@@ -390,7 +413,7 @@ public class MainActivity extends AppCompatActivity {
                                 generateRandomPlatform();
                             }
 
-                            if (Math.random() < 0.02 ) { // 2% chance per frame to spawn a flower
+                            if (Math.random() < 0.04 ) { // 4% chance per frame to spawn a flower
                                 generateRandomFlower();
                             }
 
@@ -405,7 +428,7 @@ public class MainActivity extends AppCompatActivity {
                                 long elapsedTime = System.currentTimeMillis() - startTime; // Get elapsed time in milliseconds
                                 float timeFactor = Math.min(elapsedTime / 30000f, 1f); // Scale up over 30 seconds (adjust as needed)
 
-                                flower.x -= 15f + (45f - 10f) * timeFactor;
+                                flower.x -= 14f + (45f - 10f) * timeFactor;
 
 
 
@@ -447,12 +470,11 @@ public class MainActivity extends AppCompatActivity {
                                 currentFrame = characterRunFrames[frameIndex];
                             }
 
-//                            backgroundX -= platformSpeed + 4;
-
+                            backgroundX -= platformSpeed + 4;
 
                             // Reset position for infinite scrolling
                             if (backgroundX <= -screenWidth) {
-                                backgroundX = (int)((backgroundX - platformSpeed - 5) % screenWidth);
+                                backgroundX += screenWidth;
                             }
 
                             // Draw Background
@@ -474,17 +496,19 @@ public class MainActivity extends AppCompatActivity {
 
                             // Draw Flowers
                             for (Flower flower : flowers) {
-                                int radius = flower.width / 3; // Circle radius (based on flower width)
+                                int radius = flower.width * 2 ;
 
-
-                                // Scale the flower bitmap to be 2x the circle size
-                                if (flowerBitmap != null) {
-                                    if (flower.scaledBitmap == null) {
-                                        flower.scaledBitmap = Bitmap.createScaledBitmap(flowerBitmap, flower.width * 3, flower.width * 3, false);
-                                    }
-                                    // Center the bitmap so it expands equally around the circle
-                                    canvas.drawBitmap(flower.scaledBitmap, flower.x - radius , flower.y - radius, null);
+                                // Draw the assigned bitmap
+                                if (flower.scaledBitmap != null) {
+                                    canvas.drawBitmap(flower.scaledBitmap, flower.x - radius, flower.y - radius, null);
                                 }
+//                                Paint hitboxPaint = new Paint();
+//                                hitboxPaint.setColor(Color.RED);
+//                                hitboxPaint.setStyle(Paint.Style.STROKE);
+//                                hitboxPaint.setStrokeWidth(5);
+//
+//                                int hitboxRadius = flower.width ; // Adjust the size to match expected hitbox
+//                                canvas.drawCircle(flower.x, flower.y, hitboxRadius, hitboxPaint);
                             }
                         }
                     }
@@ -512,7 +536,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Y Position Calculation (Ensure Platform is Above Character)
         int platformY;
-        if (score >= 150) {
+        if (score >= 200) {
             int choice = random.nextInt(3);
             if (choice == 0) {
                 platformY = standingPlatform.y - 80; // Front
@@ -521,7 +545,7 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 platformY = standingPlatform.y - 180; // Higher
             }
-        } else if (score >= 50) {
+        } else if (score >= 100) {
             platformY = random.nextBoolean()
                     ? standingPlatform.y - 100
                     : standingPlatform.y - 200;
@@ -554,25 +578,37 @@ public class MainActivity extends AppCompatActivity {
 
     private void generateRandomFlower() {
         Random random = new Random();
-
         boolean spawnOnPlatform = random.nextBoolean(); // 50% chance to spawn on a platform
 
-        int flowerX, flowerY;
-        Platform randomPlatform = platforms.get(random.nextInt(platforms.size()));
-
+        int flowerWidth = 35; // Example size
 
         if (spawnOnPlatform && !platforms.isEmpty()) {
-            // Spawn on a random platform
-            flowerX = randomPlatform.x + random.nextInt(randomPlatform.width); // Offset to stay within platform
-            flowerY = randomPlatform.y - 50; // Slightly above the platform
-        } else {
-            // Spawn falling from above the screen
-            flowerX = random.nextInt(screenWidth - 50); // Random X position on screen
-            flowerY = -random.nextInt(300) - 50; // Random height above the screen
+            // Find a platform that hasn't been used
+            List<Platform> availablePlatforms = new ArrayList<>();
+            for (Platform platform : platforms) {
+                if (!usedPlatforms.contains(platform)) {
+                    availablePlatforms.add(platform);
+                }
+            }
+
+            if (!availablePlatforms.isEmpty()) {
+                Platform randomPlatform = availablePlatforms.get(random.nextInt(availablePlatforms.size()));
+                usedPlatforms.add(randomPlatform); // Mark platform as used
+
+                // Spawn on a random platform
+                flowerX = randomPlatform.x + random.nextInt(randomPlatform.width - flowerWidth);
+                flowerY = randomPlatform.y - flowerWidth;
+            } else {
+                spawnOnPlatform = false;
+            }
         }
 
-        // Add new flower
-        flowers.add(new Flower(flowerX, flowerY, 30, 30)); // Flower size is 30x30 (adjust as needed)
+        if (!spawnOnPlatform) {
+            flowerX = random.nextInt(screenWidth - 50);
+            flowerY = -random.nextInt(300) - 50;
+        }
+
+        flowers.add(new Flower(flowerX, flowerY, flowerWidth, flowerBitmaps));
     }
 
 
@@ -580,8 +616,10 @@ public class MainActivity extends AppCompatActivity {
         // Clear all previous handlers to prevent conflicts
         gameHandler.removeCallbacks(gameLoop);
 
-        // Clear all platforms
+        // Clear all platforms\
+        usedPlatforms.clear();
         platforms.clear();
+        flowers.clear();
 
         // Reset game variables
         score = 0;
@@ -606,11 +644,10 @@ public class MainActivity extends AppCompatActivity {
         // Clear the SurfaceView
         if (surfaceHolder.getSurface().isValid()) {
             Canvas canvas = surfaceHolder.lockCanvas();
-            canvas.drawColor(Color.WHITE); // Clear the canvas
+            canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR); // Clear the canvas
             surfaceHolder.unlockCanvasAndPost(canvas);
         }
     }
-
 
     private void restartGame() {
         // Stop the current game loop
@@ -623,6 +660,9 @@ public class MainActivity extends AppCompatActivity {
         characterVelocity = 0;
         gravity = 2.4f;
         isOnPlatform = true;
+
+        flowers.clear();
+        usedPlatforms.clear();
 
         // Reset character & hitbox positions
         characterX = 150;
@@ -647,7 +687,7 @@ public class MainActivity extends AppCompatActivity {
         // Ensure the game surface is cleared
         if (surfaceHolder.getSurface().isValid()) {
             Canvas canvas = surfaceHolder.lockCanvas();
-            canvas.drawColor(Color.WHITE);
+            canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
             surfaceHolder.unlockCanvasAndPost(canvas);
         }
 
@@ -676,13 +716,14 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void gameOver() {
-        isPlaying = false;  // Stop the game
-        finalScoreText.setText("Final Score: " + score);
-        gameOverMenu.setVisibility(RelativeLayout.VISIBLE);  // Show the restart button
+        gameOverMenu.setVisibility(View.VISIBLE);
         btnRestart.setVisibility(Button.VISIBLE);
+        gameOverMenu.bringToFront();
+        finalScoreText.setText("Final Score: " + score);
+
         gameHandler.removeCallbacks(gameLoop);
         speechRecognizer.stopListening();  // Stop listening for voice commands
-        Toast.makeText(this, "Game Over", Toast.LENGTH_SHORT).show();  // Show a "Game Over" message
+        isPlaying = false;  // Stop the game
     }
 
     @Override

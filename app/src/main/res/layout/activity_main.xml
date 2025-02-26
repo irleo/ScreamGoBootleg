@@ -20,15 +20,15 @@
         android:layout_marginStart="16dp"
         android:layout_marginTop="8dp"
         android:text="Score: 0"
-        android:textSize="22sp"
+        android:textSize="24sp"
         android:textColor="#FFF"
         android:gravity="center" />
 
     <!-- Pause Button with Custom Image -->
     <ImageButton
         android:id="@+id/btnPause"
-        android:layout_width="51dp"
-        android:layout_height="56dp"
+        android:layout_width="60dp"
+        android:layout_height="60dp"
         android:layout_alignParentEnd="true"
         android:layout_marginTop="8dp"
         android:layout_marginEnd="16dp"
@@ -49,9 +49,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Game Paused"
-            android:textSize="24sp"
+            android:textSize="30sp"
             android:textColor="#FFF"
             android:layout_centerHorizontal="true"
+            android:layout_centerVertical="true"
             android:layout_marginTop="150dp"/>
 
         <Button
@@ -59,8 +60,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Resume"
+            android:textSize="26sp"
             android:layout_below="@id/pauseText"
             android:layout_centerHorizontal="true"
+            android:layout_centerVertical="true"
             android:layout_marginTop="20dp"/>
     </RelativeLayout>
 
@@ -89,11 +92,11 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Final Score: 0"
-            android:textSize="22sp"
+            android:textSize="28sp"
             android:textColor="#FFF"
             android:layout_below="@id/gameOverText"
             android:layout_centerHorizontal="true"
-            android:layout_marginTop="20dp"/>
+            android:layout_marginTop="40dp"/>
 
         <!-- Restart Button -->
         <Button
@@ -104,7 +107,7 @@
             android:layout_below="@id/btnResume"
             android:layout_centerHorizontal="true"
             android:layout_centerVertical="true"
-            android:textSize="20sp"
+            android:textSize="26sp"
             android:gravity="center"/>
     </RelativeLayout>
 

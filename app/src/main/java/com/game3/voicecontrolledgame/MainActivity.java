@@ -9,6 +9,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.PorterDuff;
+import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -57,7 +58,7 @@ public class MainActivity extends AppCompatActivity {
     private final int maxScore = 1200; // Score at which max speed is reached
     private boolean isOnPlatform;
     private float characterVelocity = 0f; // Vertical velocity
-    private float gravity = 2.4f;  // Gravity acceleration
+    private float gravity = 2.3f;  // Gravity acceleration
     private final float jumpMultiplier = 23f; // Adjust jump strength
 
     private final float maxGravity = 2f ;  // Maximum gravity cap
@@ -66,7 +67,7 @@ public class MainActivity extends AppCompatActivity {
     private int frameDelay = 100;
     private Platform lastPlatform = null;
     private boolean canJump = true;
-    private Bitmap[] characterRunFrames, characterJumpFrames, flowerBitmaps;
+    private Bitmap[] characterRunFrames, characterJumpFrames, flowerBitmaps, characterFrames;
     private Bitmap characterBitmap, backgroundBitmap, platformBitmap;
     private Set<Platform> usedPlatforms = new HashSet<>(); // Move this outside the method
     private int flowerX, flowerY;
@@ -77,10 +78,11 @@ public class MainActivity extends AppCompatActivity {
     private int characterX = 150;
     int characterWidth = 180; // Set your desired width
     int characterHeight = 225; // Set your desired height
-    int hitboxWidth = characterWidth - 35;  // Adjust width
-    int hitboxHeight = characterHeight - 45; // Adjust height
-    int hitboxX = characterX + 25; // Center hitbox inside sprite
+    int hitboxWidth = characterWidth - 60;  // Adjust width
+    int hitboxHeight = characterHeight - 50; // Adjust height
+    int hitboxX = characterX + 45; // Center hitbox inside sprite
     int hitboxY = characterY - 135; // Adjust vertical alignment
+    int desiredCharacterWidth, desiredCharacterHeight;
     private int backgroundX = 0;
     long startTime = System.currentTimeMillis();
 
@@ -90,6 +92,8 @@ public class MainActivity extends AppCompatActivity {
     RelativeLayout pauseMenu, gameOverMenu;
     private TextView scoreText, finalScoreText;
     boolean isPaused = false;
+    private MediaPlayer bgMusic, gameMusic;
+
 
 
     private static class Platform {
@@ -180,17 +184,31 @@ public class MainActivity extends AppCompatActivity {
             startGame(); // Start the game loop
         });
 
+        Bitmap spriteSheet = BitmapFactory.decodeResource(getResources(), R.drawable.character_spritesheet);
+        int totalFrames = 4;
+        int frameWidth = spriteSheet.getWidth() / totalFrames; // Each frame is equally spaced
+        int frameHeight = spriteSheet.getHeight();
+
+        // Desired character size
+        desiredCharacterWidth = 340;  // Adjust as needed
+        desiredCharacterHeight = 380; // Adjust as needed
+
+        characterFrames = new Bitmap[totalFrames];
+
+        for (int i = 0; i < totalFrames; i++) {
+            Bitmap frame = Bitmap.createBitmap(spriteSheet, i * frameWidth, 0, frameWidth, frameHeight);
+            characterFrames[i] = Bitmap.createScaledBitmap(frame, desiredCharacterWidth, desiredCharacterHeight, true);
+        }
+
+        // Assign scaled frames to animations
         characterRunFrames = new Bitmap[]{
-                Bitmap.createScaledBitmap(BitmapFactory.decodeResource(getResources(), R.drawable.char1), characterWidth, characterHeight, true),
-                Bitmap.createScaledBitmap(BitmapFactory.decodeResource(getResources(), R.drawable.char2), characterWidth, characterHeight, true),
-                Bitmap.createScaledBitmap(BitmapFactory.decodeResource(getResources(), R.drawable.char3), characterWidth, characterHeight, true),
-                Bitmap.createScaledBitmap(BitmapFactory.decodeResource(getResources(), R.drawable.char4), characterWidth, characterHeight, true)
+                characterFrames[0], characterFrames[1], characterFrames[2], characterFrames[3]
         };
 
         characterJumpFrames = new Bitmap[]{
-                Bitmap.createScaledBitmap(BitmapFactory.decodeResource(getResources(), R.drawable.char_jump), characterWidth, characterHeight, true),
-                Bitmap.createScaledBitmap(BitmapFactory.decodeResource(getResources(), R.drawable.char_land), characterWidth, characterHeight, true)
+                characterFrames[0], characterFrames[3]
         };
+
 
         flowerBitmaps = new Bitmap[]{
                 BitmapFactory.decodeResource(getResources(), R.drawable.cosmos),
@@ -292,6 +310,7 @@ public class MainActivity extends AppCompatActivity {
     private void startGame() {
         resetGame(); // Clear all previous data before starting
         startListening(); // Start voice recognition
+        // startBGM();
         scoreText.setVisibility(View.VISIBLE);
         btnPause.setVisibility(Button.VISIBLE);
 
@@ -321,15 +340,24 @@ public class MainActivity extends AppCompatActivity {
                         if (canvas != null) {
                             canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR); // Clear the canvas
 
+                            // Adjust platform speed dynamically based on voice strength
+                            float platformSpeed = (voiceStrength >= 5) ? Math.min(voiceStrength * 3.0f, 55) : 0;
+
+                            // Move platforms left
+                            for (Platform platform : platforms) {
+                                platform.x -= platformSpeed; // Move dynamically
+                            }
+
                             // Handle Jumping (Prevent Double Jump)
-                            if (voiceStrength > 9.99 && isOnPlatform) { // Remove 'canJump'
+                            if (voiceStrength > 9.99 && isOnPlatform) {
                                 isOnPlatform = false;
-                                characterVelocity = -Math.min(voiceStrength * 5.5f, 50);
+                                characterVelocity = -Math.min(voiceStrength * 5.5f, 65);
                             }
 
                             // Apply Gravity Smoothly
                             characterVelocity += gravity;
                             hitboxY += characterVelocity;
+
 
                             // Prevent Falling Through the Bottom of the Screen
                             if (hitboxY >= screenHeight) {
@@ -365,7 +393,7 @@ public class MainActivity extends AppCompatActivity {
                                         isOnPlatform = true;
                                         canJump = true;
                                         hitboxY = platform.y - hitboxHeight; // Align hitbox on top
-                                        hitboxX -= platformSpeed;
+                                        // hitboxX -= platformSpeed;
                                         characterVelocity = 0;
                                     }
                                 }
@@ -391,12 +419,11 @@ public class MainActivity extends AppCompatActivity {
                                 }
 
                                 // Platform movement
-                                long elapsedTime = System.currentTimeMillis() - startTime; // Get elapsed time in milliseconds
-                                float timeFactor = Math.min(elapsedTime / 30000f, 1f); // Scale up over 30 seconds (adjust as needed)
-                                platform.x -= 15f + (40f - 10f) * timeFactor;
+//                                long elapsedTime = System.currentTimeMillis() - startTime; // Get elapsed time in milliseconds
+//                                float timeFactor = Math.min(elapsedTime / 30000f, 1f); // Scale up over 30 seconds (adjust as needed)
+//                                platform.x -= 15f + (40f - 10f) * timeFactor;
 
                             }
-
 
                             // If no platform was landed on, keep falling
                             if (!isOnPlatform) {
@@ -428,8 +455,7 @@ public class MainActivity extends AppCompatActivity {
                                 long elapsedTime = System.currentTimeMillis() - startTime; // Get elapsed time in milliseconds
                                 float timeFactor = Math.min(elapsedTime / 30000f, 1f); // Scale up over 30 seconds (adjust as needed)
 
-                                flower.x -= 14f + (45f - 10f) * timeFactor;
-
+                                flower.x -= 10f + (25f - 10f) * timeFactor;
 
 
                                 // **Check for Landing on Platforms**
@@ -461,13 +487,13 @@ public class MainActivity extends AppCompatActivity {
                             // Select Character Sprite Based on State
                             Bitmap currentFrame;
                             if (!isOnPlatform) {
-                                currentFrame = (characterVelocity < 0) ? characterJumpFrames[0] : characterJumpFrames[1];
+                                currentFrame = (characterVelocity < 0) ? characterJumpFrames[0] : characterJumpFrames[1]; // Jump or land
                             } else {
-                                if (System.currentTimeMillis() - lastFrameTime > frameDelay) {
-                                    frameIndex = (frameIndex + 1) % characterRunFrames.length;
+                                if (platformSpeed > 0 && System.currentTimeMillis() - lastFrameTime > frameDelay) {
+                                    frameIndex = (frameIndex + 1) % characterRunFrames.length; // Loop through run frames only when moving
                                     lastFrameTime = System.currentTimeMillis();
                                 }
-                                currentFrame = characterRunFrames[frameIndex];
+                                currentFrame = characterRunFrames[frameIndex]; // Running animation
                             }
 
                             backgroundX -= platformSpeed + 4;
@@ -482,7 +508,10 @@ public class MainActivity extends AppCompatActivity {
                             canvas.drawBitmap(backgroundBitmap, backgroundX + screenWidth, 0, null);
 
                             // Draw Character
-                            canvas.drawBitmap(currentFrame, hitboxX - 5, hitboxY - 35,null);
+                            float spriteX = hitboxX - 95; // Center horizontally
+                            float spriteY = hitboxY - 70; // Align feet with the hitbox
+
+                            canvas.drawBitmap(currentFrame, spriteX, spriteY, null);
 
                             // Draw Platforms
                             paint.setColor(Color.RED);
@@ -531,26 +560,26 @@ public class MainActivity extends AppCompatActivity {
     private void generateRandomPlatform() {
         Random random = new Random();
 
-//       int platformHeight = 120 + random.nextInt(90);
-        int platformWidth = random.nextInt(160) + 120;
+//      int platformHeight = 120 + random.nextInt(90);
+        int platformWidth = random.nextInt(150) + 120;
 
         // Y Position Calculation (Ensure Platform is Above Character)
         int platformY;
         if (score >= 200) {
             int choice = random.nextInt(3);
             if (choice == 0) {
-                platformY = standingPlatform.y - 80; // Front
+                platformY = standingPlatform.y - 40; // Front
             } else if (choice == 1) {
-                platformY = standingPlatform.y - 130; // Mid
+                platformY = standingPlatform.y - 90; // Mid
             } else {
-                platformY = standingPlatform.y - 180; // Higher
+                platformY = standingPlatform.y - 140; // Higher
             }
         } else if (score >= 100) {
             platformY = random.nextBoolean()
-                    ? standingPlatform.y - 100
-                    : standingPlatform.y - 200;
+                    ? standingPlatform.y - 60
+                    : standingPlatform.y - 160;
         } else {
-            platformY = standingPlatform.y - (random.nextInt(200) + 90);
+            platformY = standingPlatform.y - (random.nextInt(160) + 50);
         }
 
         int platformHeight = screenHeight - platformY;
@@ -615,6 +644,7 @@ public class MainActivity extends AppCompatActivity {
     private void resetGame() {
         // Clear all previous handlers to prevent conflicts
         gameHandler.removeCallbacks(gameLoop);
+        // stopBGM();
 
         // Clear all platforms\
         usedPlatforms.clear();
@@ -653,12 +683,13 @@ public class MainActivity extends AppCompatActivity {
         // Stop the current game loop
         isPlaying = false;
         gameHandler.removeCallbacks(gameLoop);
+        // startBGM();
 
         // Reset game variables
         score = 0;
         scoreText.setText("Score: " + score);
         characterVelocity = 0;
-        gravity = 2.4f;
+        gravity = 2.3f;
         isOnPlatform = true;
 
         flowers.clear();
@@ -706,6 +737,7 @@ public class MainActivity extends AppCompatActivity {
     private void pauseGame() {
         isPlaying = false;  // Stop game loop
         pauseMenu.setVisibility(RelativeLayout.VISIBLE);
+        // bgMusic.pause();
     }
 
     // Resumes the game
@@ -713,6 +745,7 @@ public class MainActivity extends AppCompatActivity {
         isPlaying = true;
         pauseMenu.setVisibility(Button.GONE);
         gameHandler.post(gameLoop);  // Resume game loop
+        // bgMusic.start();
     }
 
     private void gameOver() {
@@ -720,10 +753,28 @@ public class MainActivity extends AppCompatActivity {
         btnRestart.setVisibility(Button.VISIBLE);
         gameOverMenu.bringToFront();
         finalScoreText.setText("Final Score: " + score);
+        // stopBGM();
 
         gameHandler.removeCallbacks(gameLoop);
         speechRecognizer.stopListening();  // Stop listening for voice commands
         isPlaying = false;  // Stop the game
+    }
+
+    private void startBGM() {
+        if (bgMusic == null) {
+            bgMusic = MediaPlayer.create(this, R.raw.bgmusic);
+            bgMusic.setLooping(true); // Loop the music
+            bgMusic.setVolume(2f, 2f); // Adjust volume (0.0 - 1.0)
+        }
+        bgMusic.start();
+    }
+
+    private void stopBGM() {
+        if (bgMusic != null) {
+            bgMusic.stop();
+            bgMusic.release();
+            bgMusic = null;
+        }
     }
 
     @Override

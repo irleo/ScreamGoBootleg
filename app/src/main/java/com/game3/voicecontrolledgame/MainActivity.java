@@ -216,7 +216,6 @@ public class MainActivity extends AppCompatActivity {
                 BitmapFactory.decodeResource(getResources(), R.drawable.orchid),
                 BitmapFactory.decodeResource(getResources(), R.drawable.marrigold),
                 BitmapFactory.decodeResource(getResources(), R.drawable.daffodil),
-                BitmapFactory.decodeResource(getResources(), R.drawable.peony),
                 BitmapFactory.decodeResource(getResources(), R.drawable.jasmin)
         };
 

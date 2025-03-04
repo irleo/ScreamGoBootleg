@@ -79,7 +79,7 @@ public class MainActivity extends AppCompatActivity {
     int characterWidth = 180; // Set your desired width
     int characterHeight = 225; // Set your desired height
     int hitboxWidth = characterWidth - 60;  // Adjust width
-    int hitboxHeight = characterHeight - 50; // Adjust height
+    int hitboxHeight = characterHeight - 60; // Adjust height
     int hitboxX = characterX + 45; // Center hitbox inside sprite
     int hitboxY = characterY - 135; // Adjust vertical alignment
     int desiredCharacterWidth, desiredCharacterHeight;
@@ -191,7 +191,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Desired character size
         desiredCharacterWidth = 340;  // Adjust as needed
-        desiredCharacterHeight = 380; // Adjust as needed
+        desiredCharacterHeight = 390; // Adjust as needed
 
         characterFrames = new Bitmap[totalFrames];
 
@@ -206,18 +206,21 @@ public class MainActivity extends AppCompatActivity {
         };
 
         characterJumpFrames = new Bitmap[]{
-                characterFrames[0], characterFrames[3]
+                characterFrames[1], characterFrames[3]
         };
 
 
         flowerBitmaps = new Bitmap[]{
                 BitmapFactory.decodeResource(getResources(), R.drawable.cosmos),
                 BitmapFactory.decodeResource(getResources(), R.drawable.flower11),
-                BitmapFactory.decodeResource(getResources(), R.drawable.flower),
+                BitmapFactory.decodeResource(getResources(), R.drawable.orchid),
+                BitmapFactory.decodeResource(getResources(), R.drawable.marrigold),
+                BitmapFactory.decodeResource(getResources(), R.drawable.daffodil),
+                BitmapFactory.decodeResource(getResources(), R.drawable.peony),
                 BitmapFactory.decodeResource(getResources(), R.drawable.jasmin)
         };
 
-        platformBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.platform);
+        platformBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.pform);
 
         backgroundBitmap = BitmapFactory.decodeResource(getResources(), R.drawable.bg);
         backgroundBitmap = Bitmap.createScaledBitmap(backgroundBitmap, screenWidth, screenHeight, true);
@@ -440,7 +443,7 @@ public class MainActivity extends AppCompatActivity {
                                 generateRandomPlatform();
                             }
 
-                            if (Math.random() < 0.04 ) { // 4% chance per frame to spawn a flower
+                            if (Math.random() < 0.01 ) { // 1% chance per frame to spawn a flower
                                 generateRandomFlower();
                             }
 
@@ -455,7 +458,7 @@ public class MainActivity extends AppCompatActivity {
                                 long elapsedTime = System.currentTimeMillis() - startTime; // Get elapsed time in milliseconds
                                 float timeFactor = Math.min(elapsedTime / 30000f, 1f); // Scale up over 30 seconds (adjust as needed)
 
-                                flower.x -= 10f + (25f - 10f) * timeFactor;
+                                flower.x -= platformSpeed;
 
 
                                 // **Check for Landing on Platforms**
@@ -487,13 +490,13 @@ public class MainActivity extends AppCompatActivity {
                             // Select Character Sprite Based on State
                             Bitmap currentFrame;
                             if (!isOnPlatform) {
-                                currentFrame = (characterVelocity < 0) ? characterJumpFrames[0] : characterJumpFrames[1]; // Jump or land
+                                currentFrame = (characterVelocity < 0) ? characterJumpFrames[1] : characterJumpFrames[0]; // Jump or land
                             } else {
                                 if (platformSpeed > 0 && System.currentTimeMillis() - lastFrameTime > frameDelay) {
                                     frameIndex = (frameIndex + 1) % characterRunFrames.length; // Loop through run frames only when moving
                                     lastFrameTime = System.currentTimeMillis();
                                 }
-                                currentFrame = characterRunFrames[frameIndex]; // Running animation
+                                currentFrame = characterRunFrames[frameIndex + 1]; // Running animation
                             }
 
                             backgroundX -= platformSpeed + 4;
@@ -507,12 +510,6 @@ public class MainActivity extends AppCompatActivity {
                             canvas.drawBitmap(backgroundBitmap, backgroundX, 0, null);
                             canvas.drawBitmap(backgroundBitmap, backgroundX + screenWidth, 0, null);
 
-                            // Draw Character
-                            float spriteX = hitboxX - 95; // Center horizontally
-                            float spriteY = hitboxY - 70; // Align feet with the hitbox
-
-                            canvas.drawBitmap(currentFrame, spriteX, spriteY, null);
-
                             // Draw Platforms
                             paint.setColor(Color.RED);
                             for (Platform platform : platforms) {
@@ -522,6 +519,12 @@ public class MainActivity extends AppCompatActivity {
                                 }
                                 canvas.drawBitmap(platform.scaledBitmap, platform.x, platform.y, null);
                             }
+
+                            // Draw Character
+                            float spriteX = hitboxX - 95; // Center horizontally
+                            float spriteY = hitboxY - 50; // Align feet with the hitbox
+
+                            canvas.drawBitmap(currentFrame, spriteX, spriteY, null);
 
                             // Draw Flowers
                             for (Flower flower : flowers) {
@@ -561,7 +564,7 @@ public class MainActivity extends AppCompatActivity {
         Random random = new Random();
 
 //      int platformHeight = 120 + random.nextInt(90);
-        int platformWidth = random.nextInt(150) + 120;
+        int platformWidth = random.nextInt(140) + 130;
 
         // Y Position Calculation (Ensure Platform is Above Character)
         int platformY;
@@ -633,7 +636,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (!spawnOnPlatform) {
-            flowerX = random.nextInt(screenWidth - 50);
+            flowerX = random.nextInt(screenWidth + 100);
             flowerY = -random.nextInt(300) - 50;
         }
 

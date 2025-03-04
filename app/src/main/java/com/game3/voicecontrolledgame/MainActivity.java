@@ -495,7 +495,7 @@ public class MainActivity extends AppCompatActivity {
                                     frameIndex = (frameIndex + 1) % characterRunFrames.length; // Loop through run frames only when moving
                                     lastFrameTime = System.currentTimeMillis();
                                 }
-                                currentFrame = characterRunFrames[frameIndex + 1]; // Running animation
+                                currentFrame = characterRunFrames[frameIndex]; // Running animation
                             }
 
                             backgroundX -= platformSpeed + 4;
